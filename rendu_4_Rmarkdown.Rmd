@@ -1,0 +1,107 @@
+---
+title: "rendu_4_Rmarkdown"
+author: "Benjamin Orlik"
+date: "26/04/2020"
+output: html_document
+---
+
+## Installation des library necessaires ##
+
+```{r}
+library("knitr")
+library("rmarkdown")
+library("markdown")
+library("lubridate")
+library("forecast")
+library("tidyverse")
+```
+
+## Creation d'une serie temporelle de CO2 ##
+
+```{r}
+hawai <- read_csv("data/hawai.csv")
+CO2_ts <- ts(c(hawai$CO2), start = c(1958, 3), frequency = 12)
+CO2_ts
+```
+
+## Separation en partie d'entrainement et de test ##
+
+Avec comme objectif, d'obtenir 70 % de donnees d'entrainement, il faut finir en 1989.
+
+```{r}
+hawai_ts_train <- window(CO2_ts, end = c(1989, 12))
+hawai_ts_test <- window(CO2_ts, start = c(1990, 1))
+```
+
+## Creation d'un modele ETS pour les donnees d'entrainement ##
+
+```{r}
+hawai_model <- ets(hawai_ts_train)
+hawai_model
+autoplot(hawai_model)
+```
+
+On observe une hausse du niveau de CO2 de 1958 à 1990 et on voit égqlement une variation saisonniere du niveau de CO2.
+(M,Ad,M) signifie que l'erreur est multiplicative, la tendance est presente, et la saison est multiplicative.
+
+
+## Projection de la prevision de CO2 atmosphérique ##
+
+```{r}
+hawai_ets <- hawai_ts_train %>% ets()
+hawai_fc <- hawai_ets %>% forecast(h=12*10)
+hawai_fc %>% autoplot() 
+summary(hawai_fc)
+
+autoplot(CO2_ts)
+autoplot(hawai_ts_test)
+```
+
+Par comparaison, on peut voir que la prediction de l'ETS semble bonne pour la variation saisonniere.
+En revanche, on remarque globalement que les predictions sont en dessous de la realite.
+
+# On peut aussi vérifier la précision de la prevision :
+
+```{r}
+accuracy(hawai_fc, CO2_ts)
+```
+
+## Analyse des residus ##
+
+```{r}
+checkresiduals(hawai_ets)
+```
+
+On observe dans le graphique "Lag" que certaines données dépassent le seuil de confiance d'autocorrélation. Il existe donc une corrélation signidicative dans les données.
+Enfin, le graphique "residuals" semble graphiquement suivre une loi normale.
+
+# Test de Shapiro 
+
+Pour verifier la normalité, on effectue un test de Shapiro :
+
+```{r}
+hawai_residu <- residuals(hawai_ets)
+shapiro.test(hawai_residu)
+```
+
+On obtient une p-value proche de zero, donc significative. Cela signifit que l'echantillon ne suis donc pas une loi normale.
+
+## Amelioration du modele ##
+
+On peut aussi ameliorer le modele pour obtenir une meilleure prediction en effetuant un pretraitement. On peut par exemple optimiser la valeur lambda :
+
+```{r}
+BoxCox.lambda(hawai_ts_train)
+
+hawai_ets <- hawai_ts_train %>% ets(lambda = 0.1127)
+hawai_fc <- hawai_ets %>% forecast(h=12*10)
+hawai_fc %>% autoplot() 
+summary(hawai_fc)
+```
+
+Le resultat semble bien meilleur. On peut observer une forte diminution de la variabilite du modele (partie bleue)
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
